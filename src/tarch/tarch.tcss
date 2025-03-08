@@ -1,0 +1,31 @@
+MarkableTree > .markable-tree--label-marked {
+    background: $secondary-darken-3;
+    color: $text;
+    text-style: bold;
+}
+
+FileChooserScreen {
+    align: center middle;
+}
+
+FileChooserScreen > Center {
+    border: solid;
+    height: 75%;
+    width: 50%;
+}
+
+FileChooserScreen Label {
+    padding: 1;
+    background: $secondary;
+    color: $text;
+    text-style: bold;
+    width: 100%;
+}
+
+FileChooserScreen OnlyDirectoryTree {
+    margin: 1;
+}
+
+FileChooserScreen Input {
+    background: $primary-darken-3;
+}
