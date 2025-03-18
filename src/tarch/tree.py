@@ -4,6 +4,7 @@ import argparse
 import itertools
 import pathlib
 import sys
+import tarfile
 from dataclasses import dataclass, field
 from functools import cached_property
 from rich.style import Style
@@ -130,10 +131,9 @@ class VirtualFileTree(MarkableTree[VirtualDirEntry]):
 
 
 class LoadingScreen(Screen[VirtualDirEntry | None]):
-    def __init__(self, paths: Iterable[str], limit: int | None = None):
+    def __init__(self, archive: pathlib.Path):
         super().__init__()
-        self._paths: Iterable[str] = paths
-        self._limit: int | None = limit
+        self._archive: pathlib.Path = archive
 
     def on_mount(self) -> None:
         self._build_model()
@@ -141,27 +141,37 @@ class LoadingScreen(Screen[VirtualDirEntry | None]):
     def compose(self) -> ComposeResult:
         with Center():
             yield Label("Loading...")
-            yield ProgressBar(total=self._limit)
+            yield ProgressBar()
+
+    def _entries(self) -> Iterator[tarfile.TarInfo]:
+        archive = tarfile.TarFile.open(self._archive)
+        while entry := archive.next():
+            yield entry
 
     @work(thread=True)
     def _build_model(self) -> VirtualDirEntry:
         root = VirtualDirEntry("<root>", None)
         progress_bar = self.query_one(ProgressBar)
-        try:
-            update_interval = len(self._paths) // 200  # type: ignore[arg-type]
-            self.log(update_interval=update_interval, source="dynamic")
-        except TypeError:
-            update_interval = 100
-            self.log(update_interval=update_interval, source="fixed")
-        for i, path in enumerate(self._paths, start=1):
-            components = path.split("/")
+
+        # This program is designed to work with large archives, so for now, we
+        # don't assume we can count the entries before starting
+        # TODO add some heuristic progress reporting based on byte counts or something
+        update_interval = 100
+        self.log(update_interval=update_interval, source="fixed")
+
+        for i, entry in enumerate(self._entries(), start=1):
+            components = entry.name.split("/")
             current = root
-            for component in components[:-1]:
+            leaf: str | None = None
+            if not entry.isdir():
+                leaf = components[-1]
+                components = components[:-1]
+            for component in components:
                 child = current.add_child(component, is_dir=True)
                 current = child
-            if components[-1]:
-                # components[-1] is only nonempty if it's a file, not a directory
-                current.add_child(components[-1], is_dir=False)
+            if leaf:
+                # leaf is only set if it's a file, not a directory
+                current.add_child(leaf, is_dir=False)
             if i % update_interval == 0:
                 progress_bar.update(progress=i)
         return root
@@ -260,11 +270,11 @@ class PathTreeScreen(Screen):
 
 class PathTreeApp(App):
     BINDINGS = [("q", "quit")]
-    CSS_PATH = "file-copy.tcss"
+    CSS_PATH = "tarch.tcss"
 
-    def __init__(self, paths: Iterable[str], limit: int | None = None):
+    def __init__(self, archive: pathlib.Path, limit: int | None = None):
         super().__init__()
-        self._paths: Iterable[str] = paths
+        self._archive: pathlib.Path = archive
         self._limit: int | None = limit
 
     def _push_main_screen(self, root: VirtualDirEntry | None):
@@ -275,32 +285,23 @@ class PathTreeApp(App):
         self.uninstall_screen("loading")
 
     def on_mount(self):
-        self.install_screen(LoadingScreen(self._paths, self._limit), "loading")
+        self.install_screen(LoadingScreen(self._archive), "loading")
         self.push_screen("loading", self._push_main_screen)
 
     def compose(self):
         yield Static("Loading failed")
 
 
-def load_file(filename: str, prefix: str = "") -> Iterator[str]:
-    with open(filename) as f:
-        for line in f:
-            line = line.strip()
-            if line and line.startswith(prefix):
-                yield line
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Show a summary of files from rsync output")
+    parser = argparse.ArgumentParser(description="Display an archive file")
     parser.add_argument("filename")
-    parser.add_argument("--prefix")
-    parser.add_argument("-n", "--limit", type=int)
     args = parser.parse_args()
 
-    paths = list(load_file(args.filename, args.prefix))
-    if args.limit:
-        paths = paths[:args.limit]
-    app = PathTreeApp(paths, len(paths))
+    archive = pathlib.Path(args.filename)
+    if not archive.exists():
+        print(f"{archive} does not exist!", file=sys.stderr)
+        sys.exit(1)
+    app = PathTreeApp(archive)
     app.run()
 
 
