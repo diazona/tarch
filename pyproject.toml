@@ -1,6 +1,6 @@
 [project]
 name = "tarch"
-version = "0.1.0"
+version = "0.1.dev0"
 description = "A terminal archiver"
 authors = [
     {name = "David Zaslavsky", email = "diazona@ellipsix.net"},
