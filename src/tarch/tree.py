@@ -222,7 +222,7 @@ class FileChooserScreen(ModalScreen[pathlib.Path]):
     def compose(self) -> ComposeResult:
         with Center():
             yield Label("Destination")
-            yield OnlyDirectoryTree(pathlib.Path("/home/diazona"))
+            yield OnlyDirectoryTree(pathlib.Path.home())
             yield Input()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
