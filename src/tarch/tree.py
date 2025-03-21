@@ -240,11 +240,12 @@ class DirectoryChooserScreen(ModalScreen[pathlib.Path]):
 
 
 class PathTreeScreen(Screen):
-    BINDINGS = [("w", "write_marked")]
+    BINDINGS = [("ctrl+x", "extract_marked")]
 
-    def __init__(self, root: VirtualDirEntry):
+    def __init__(self, root: VirtualDirEntry, archive: tarfile.TarFile):
         super().__init__()
         self._root = root
+        self._archive = archive
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -256,13 +257,15 @@ class PathTreeScreen(Screen):
             yield Footer()
 
     @work
-    async def action_write_marked(self) -> None:
-        output_file = await self.app.push_screen_wait(FileChooserScreen())
+    async def action_extract_marked(self) -> None:
+        output_root = await self.app.push_screen_wait(DirectoryChooserScreen())
+        self.log("Extracting marked", path=output_root)
         marked: set[VirtualDirEntry] = self.query_one(VirtualFileTree).marked
-        self.log("writing marked", path=output_file)
-        with output_file.open("w") as f:
-            for data in marked:
-                print(data.path, file=f)
+        paths_to_extract = {str(data.path)[7:] for data in marked}
+        self.log("Marked paths", marked=paths_to_extract)
+        members_to_extract = [m for m in self._archive.getmembers() if m.name in paths_to_extract]
+        self.log("Members to extract", members_to_extract=members_to_extract)
+        self._archive.extractall(output_root, members_to_extract, filter="data")
 
 
 class PathTreeApp(App):
@@ -277,7 +280,7 @@ class PathTreeApp(App):
     def _push_main_screen(self, root: VirtualDirEntry | None):
         if not root:
             return
-        self.install_screen(PathTreeScreen(root), "main")
+        self.install_screen(PathTreeScreen(root, tarfile.TarFile.open(self._archive)), "main")
         self.push_screen("main")
         self.uninstall_screen("loading")
 
