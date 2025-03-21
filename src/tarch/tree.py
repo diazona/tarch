@@ -216,20 +216,19 @@ class OnlyDirectoryTree(DirectoryTree):
         self.show_hidden_files = not self.show_hidden_files
 
 
-class FileChooserScreen(ModalScreen[pathlib.Path]):
-    BINDINGS = [("escape", "dismiss")]
+class DirectoryChooserScreen(ModalScreen[pathlib.Path]):
+    BINDINGS = [
+        ("escape", "dismiss"),
+        ("x", "submit"),
+    ]
 
     def compose(self) -> ComposeResult:
         with Center():
             yield Label("Destination")
             yield OnlyDirectoryTree(pathlib.Path.home())
-            yield Input()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_submit()
-
-    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
-        self.focus_next()
 
     def action_submit(self) -> None:
         tree = self.query_one(DirectoryTree)
@@ -237,9 +236,7 @@ class FileChooserScreen(ModalScreen[pathlib.Path]):
             directory = tree.cursor_node.data.path  # type: ignore[union-attr]
         except AttributeError:
             return
-        field = self.query_one(Input)
-        name = field.value
-        self.dismiss(directory / name)
+        self.dismiss(directory)
 
 
 class PathTreeScreen(Screen):
