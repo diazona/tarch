@@ -227,7 +227,7 @@ class DirectoryChooserScreen(ModalScreen[pathlib.Path]):
 
     def compose(self) -> ComposeResult:
         with Center():
-            yield Label("Destination")
+            yield Label("Extract under")
             yield OnlyDirectoryTree(pathlib.Path.home())
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
