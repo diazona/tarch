@@ -184,7 +184,10 @@ class LoadingScreen(Screen[VirtualDirEntry | None]):
 
 
 class OnlyDirectoryTree(DirectoryTree):
-    BINDINGS = [("h", "toggle_hidden")]
+    BINDINGS = [
+        ("h", "toggle_hidden"),
+        ("enter", "screen.submit"),
+    ]
 
     show_hidden_files: reactive[bool] = reactive(False)
 
@@ -219,7 +222,7 @@ class OnlyDirectoryTree(DirectoryTree):
 class DirectoryChooserScreen(ModalScreen[pathlib.Path]):
     BINDINGS = [
         ("escape", "dismiss"),
-        ("x", "submit"),
+        ("enter", "submit"),
     ]
 
     def compose(self) -> ComposeResult:
