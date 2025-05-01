@@ -269,6 +269,7 @@ class PathTreeScreen(Screen):
         members_to_extract = [m for m in self._archive.getmembers() if m.name in paths_to_extract]
         self.log("Members to extract", members_to_extract=members_to_extract)
         self._archive.extractall(output_root, members_to_extract, filter="data")
+        self.app.notify(f"Extracted {len(marked)} items under {output_root}")
 
 
 class PathTreeApp(App):
