@@ -184,7 +184,10 @@ class LoadingScreen(Screen[VirtualDirEntry | None]):
 
 
 class OnlyDirectoryTree(DirectoryTree):
-    BINDINGS = [("h", "toggle_hidden")]
+    BINDINGS = [
+        ("h", "toggle_hidden"),
+        ("enter", "screen.submit"),
+    ]
 
     show_hidden_files: reactive[bool] = reactive(False)
 
@@ -216,20 +219,19 @@ class OnlyDirectoryTree(DirectoryTree):
         self.show_hidden_files = not self.show_hidden_files
 
 
-class FileChooserScreen(ModalScreen[pathlib.Path]):
-    BINDINGS = [("escape", "dismiss")]
+class DirectoryChooserScreen(ModalScreen[pathlib.Path]):
+    BINDINGS = [
+        ("escape", "dismiss"),
+        ("enter", "submit"),
+    ]
 
     def compose(self) -> ComposeResult:
         with Center():
-            yield Label("Destination")
+            yield Label("Extract under")
             yield OnlyDirectoryTree(pathlib.Path.home())
-            yield Input()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_submit()
-
-    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
-        self.focus_next()
 
     def action_submit(self) -> None:
         tree = self.query_one(DirectoryTree)
@@ -237,17 +239,16 @@ class FileChooserScreen(ModalScreen[pathlib.Path]):
             directory = tree.cursor_node.data.path  # type: ignore[union-attr]
         except AttributeError:
             return
-        field = self.query_one(Input)
-        name = field.value
-        self.dismiss(directory / name)
+        self.dismiss(directory)
 
 
 class PathTreeScreen(Screen):
-    BINDINGS = [("w", "write_marked")]
+    BINDINGS = [("ctrl+x", "extract_marked")]
 
-    def __init__(self, root: VirtualDirEntry):
+    def __init__(self, root: VirtualDirEntry, archive: tarfile.TarFile):
         super().__init__()
         self._root = root
+        self._archive = archive
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -259,13 +260,16 @@ class PathTreeScreen(Screen):
             yield Footer()
 
     @work
-    async def action_write_marked(self) -> None:
-        output_file = await self.app.push_screen_wait(FileChooserScreen())
+    async def action_extract_marked(self) -> None:
+        output_root = await self.app.push_screen_wait(DirectoryChooserScreen())
+        self.log("Extracting marked", path=output_root)
         marked: set[VirtualDirEntry] = self.query_one(VirtualFileTree).marked
-        self.log("writing marked", path=output_file)
-        with output_file.open("w") as f:
-            for data in marked:
-                print(data.path, file=f)
+        paths_to_extract = {str(data.path)[7:] for data in marked}
+        self.log("Marked paths", marked=paths_to_extract)
+        members_to_extract = [m for m in self._archive.getmembers() if m.name in paths_to_extract]
+        self.log("Members to extract", members_to_extract=members_to_extract)
+        self._archive.extractall(output_root, members_to_extract, filter="data")
+        self.app.notify(f"Extracted {len(marked)} items under {output_root}")
 
 
 class PathTreeApp(App):
@@ -280,7 +284,7 @@ class PathTreeApp(App):
     def _push_main_screen(self, root: VirtualDirEntry | None):
         if not root:
             return
-        self.install_screen(PathTreeScreen(root), "main")
+        self.install_screen(PathTreeScreen(root, tarfile.TarFile.open(self._archive)), "main")
         self.push_screen("main")
         self.uninstall_screen("loading")
 
